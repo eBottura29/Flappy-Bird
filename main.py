@@ -7,7 +7,7 @@ class Settings:
     MAX_VEL = 1000
     PIPE_VEL = 1000
     JUMP_HEIGHT = 900 // 0.72
-    POPULATION = 10
+    POPULATION = 25
 
 
 class Pipe:
@@ -47,6 +47,9 @@ class Pipes:
         self.top = Pipe(Vector2(self.position.x, self.position.y + window.HEIGHT + self.separation // 2), Vector2(self.width, window.HEIGHT), self.color)
         self.bottom = Pipe(Vector2(self.position.x, self.position.y - self.separation // 2), Vector2(self.width, window.HEIGHT), self.color)
 
+    def reset(self):
+        self.position = Vector2(window.WIDTH // 2, random.randint(-self.variation // 2, self.variation // 2))
+
 
 class Player:
     def __init__(self, position, radius, color):
@@ -73,6 +76,7 @@ class Player:
             Connection(3, self.neurons[3], self.neurons[4], random_float(-1, 1), True),
         ]
 
+        self.time_survived = time.time()
         self.fitness = 0
 
     def compute(self, distance_to_pipe, distance_to_top_pipe, distance_to_bottom_pipe):
@@ -142,17 +146,17 @@ class Player:
         # DEBUG
         # self.color = color
 
-        self.fitness = score
-        print(self.fitness)
+        self.time_survived -= time.time()
+        self.time_survived = abs(self.time_survived)
+
+        self.fitness = (score + 1) * self.time_survived
 
         self.position.y = clamp(self.position.y, -window.HEIGHT // 2 + self.radius, window.HEIGHT // 2 - self.radius)
 
-    def rebirth(self, best):
+    def rebirth(self):
         self.position = self.initial_position
         self.alive = True
         self.color = self.initial_color
-
-        self.mutate(best)
 
         self.fitness = 0
 
@@ -161,8 +165,47 @@ class Player:
             draw_circle(window.SURFACE, self.color, self.position, self.radius)
 
 
+def save():
+    global winner
+
+    file_name = f"{time.localtime().tm_mon:02}{time.localtime().tm_mday:02}{time.localtime().tm_year:04}-{time.localtime().tm_hour * 3600 + time.localtime().tm_min * 60 + time.localtime().tm_sec}.neat"
+    print(f"Saving to: {file_name}")
+
+    # Get values
+    neuron_ids = []
+    neuron_types = []
+    biases = []
+
+    enabled = []
+    from_neurons_id = []
+    to_neurons_id = []
+    weights = []
+
+    for n in winner.neurons:
+        neuron_ids.append(n.id)
+        neuron_types.append(n.type.name)
+        biases.append(n.bias)
+
+    for c in winner.connections:
+        enabled.append(c.enabled)
+        from_neurons_id.append(c.from_neuron.id)
+        to_neurons_id.append(c.to_neuron.id)
+        weights.append(c.weight)
+
+    with open(file_name, "w") as f:
+        f.write(f"neuron ids: {neuron_ids}\n")
+        f.write(f"neuron types: {neuron_types}\n")
+        f.write(f"biases: {biases}\n")
+        f.write(f"enabled: {enabled}\n")
+        f.write(f"from neurons: {from_neurons_id}\n")
+        f.write(f"to neurons: {to_neurons_id}\n")
+        f.write(f"weights: {weights}")
+
+
 def game():
-    global score
+    global score, generation, winner
+
+    winner = players[0]
 
     pipes.update()
 
@@ -177,9 +220,29 @@ def game():
         if player.alive:
             current_population += 1
 
-    # DEBUG
-    # if input_manager.get_key_down(pygame.K_b):
-    #     player.rebirth(WHITE)
+    # If generation dies
+    if current_population == 0:
+        # Determine agent with highest fitness
+        winner = players[0]
+
+        for player in players:
+            if winner.fitness < player.fitness:
+                winner = player
+
+        # Inherit and mutate
+        for player in players:
+            player.rebirth()
+
+            for n in player.neurons:
+                n.mutate_bias(winner.neurons, 0.1)
+
+            for c in player.connections:
+                c.mutate_weight(winner.connections, 0.1)
+
+        # Reset game
+        pipes.reset()
+        score = 0
+        generation += 1
 
     pipes.top.render()
     pipes.bottom.render()
@@ -207,7 +270,7 @@ def start():
 
     players = []
 
-    for i in range(Settings.POPULATION):
+    for _ in range(Settings.POPULATION):
         players.append(Player(Vector2(-window.WIDTH // 3, 0), window.WIDTH // 50, WHITE))
 
     variation = window.HEIGHT // 2
@@ -220,6 +283,7 @@ def update():
     window.SURFACE.fill(BLACK.tup())
 
     if input_manager.get_key_down(pygame.K_ESCAPE):
+        save()
         window.running = False
 
     game()

@@ -50,6 +50,26 @@ class Neuron:
         x = clamp(x, -100, 100)
         return 1 / (1 + math.exp(-x))
 
+    def mutate_bias(self, best_neurons, perturb_amount=0.1):
+        """
+        Mutate the bias by inheriting the bias from the best agent's neuron and slightly perturbing it.
+
+        :param best_neurons: A list of neurons from the best agent.
+        :param perturb_amount: Maximum amount to perturb the bias.
+        """
+        # Find the matching neuron in the best agent's neurons
+        for best_neuron in best_neurons:
+            if best_neuron.id == self.id:
+                # Inherit the bias from the best neuron
+                self.bias = best_neuron.bias
+
+                # Slightly perturb the bias
+                self.bias += random.uniform(-perturb_amount, perturb_amount)
+                return  # Stop after finding the match
+
+        # If no matching neuron is found, leave the bias unchanged or initialize it (optional)
+        print(f"Warning: No matching neuron found for id {self.id}")
+
 
 class Connection:
     def __init__(self, innovation_number, from_neuron, to_neuron, weight, enabled=True):
@@ -59,11 +79,23 @@ class Connection:
         self.weight = weight
         self.enabled = enabled
 
-    def mutate_weight(self, perturb_probability=0.9, perturb_amount=0.1):
-        # With `perturb_probability`, slightly adjust the weight
-        if random.random() < perturb_probability:
-            # Perturb the weight by a small random amount
-            self.weight += random.uniform(-perturb_amount, perturb_amount)
-        else:
-            # Replace the weight with a completely random value
-            self.weight = random.uniform(-1.0, 1.0)  # Random weight between -1 and 1
+    def mutate_weight(self, best_connections, perturb_amount=0.1):
+        """
+        Mutate the weight of this connection by inheriting the weight
+        from the highest-scoring agent and slightly perturbing it.
+
+        :param best_connections: A list of connections from the best agent.
+        :param perturb_amount: Maximum amount to perturb the weight.
+        """
+        # Find the matching connection in the best agent's connections
+        for best_connection in best_connections:
+            if best_connection.innovation_number == self.innovation_number:
+                # Inherit the weight from the best connection
+                self.weight = best_connection.weight
+
+                # Slightly perturb the weight
+                self.weight += random.uniform(-perturb_amount, perturb_amount)
+                return  # Stop after finding the match
+
+        # If no matching connection is found, leave the weight unchanged or initialize it with a random value (optional).
+        print(f"Warning: No matching connection found for innovation {self.innovation_number}")
