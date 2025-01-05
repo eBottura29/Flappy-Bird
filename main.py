@@ -1,5 +1,7 @@
 from pg_extensions import *
 
+score = 0
+
 
 class Settings:
     GRAVITY = Vector2(0, -2000)
@@ -32,12 +34,15 @@ class Pipes:
         self.bottom = Pipe(Vector2(self.position.x, self.position.y - self.separation // 2), Vector2(self.width, window.HEIGHT), self.color)
 
     def update(self):
+        global score
+
         # Move pipe left
         self.position.x -= Settings.PIPE_VEL * window.delta_time
 
         # Reset pipe position
         if self.position.x + self.width < -window.WIDTH // 2:
             self.position = Vector2(window.WIDTH // 2, random.randint(-self.variation // 2, self.variation // 2))
+            score += 1
 
         # Update pipe objects
         self.top = Pipe(Vector2(self.position.x, self.position.y + window.HEIGHT + self.separation // 2), Vector2(self.width, window.HEIGHT), self.color)
@@ -51,6 +56,7 @@ class Player:
         self.radius = radius
         self.color = color
         self.alive = True
+        self.fitness = 0
 
     def jump(self):
         self.velocity.y = Settings.JUMP_HEIGHT
@@ -68,7 +74,7 @@ class Player:
 
             # Check collisions and handle if present
             if self.check_collisions(pipes.top, True) or self.check_collisions(pipes.bottom, False):
-                self.handle_collisions()
+                self.handle_collisions(GRAY)
 
     def check_collisions(self, pipe, is_top):
         # Ground and ceiling check
@@ -78,8 +84,18 @@ class Player:
         # Clamp xy to pipe bounds
         closest = Vector2(
             clamp(self.position.x, pipe.position.x, pipe.position.x + pipe.size.x),  # Clamp X within pipe's width
-            clamp(self.position.y, pipe.position.y, pipe.position.y - pipe.size.y),  # Clamp Y within pipe's height
+            clamp(self.position.y, pipe.position.y - pipe.size.y, pipe.position.y),  # Clamp Y within pipe's height
         )
+
+        # print(f"Is Top: {is_top}")
+        # print(f"Pipe Top: {pipe.position.y}")
+        # print(f"Pipe Bottom: {pipe.position.y-pipe.size.y}")
+        # print(f"Player Position: {player.position.y}")
+        # print(f"Player Clamped Position: {clamp(self.position.y, pipe.position.y, pipe.position.y - pipe.size.y)}")
+        # print(f"Closest Position: {closest.y}")
+        # print(f"######################################################################")
+
+        # draw_circle(window.SURFACE, GREEN, closest, self.radius, 2)
 
         # Calculate squared distance from the circle to the closest point on the pipe
         dst_sqr = (self.position.x - closest.x) ** 2 + (self.position.y - closest.y) ** 2
@@ -90,13 +106,18 @@ class Player:
 
         return False
 
-    def handle_collisions(self):
-        # Kill the player
-        # self.alive = False
-        # Change player color
-        self.color = GRAY
+    def handle_collisions(self, color):
+        self.alive = False
+        # self.color = color
+
+        self.fitness = score
+        print(self.fitness)
 
         self.position.y = clamp(self.position.y, -window.HEIGHT // 2 + self.radius, window.HEIGHT // 2 - self.radius)
+
+    # def rebirth(self, color):
+    #     self.alive = True
+    #     self.color = color
 
     def render(self):
         if self.alive:
@@ -104,15 +125,22 @@ class Player:
 
 
 def game():
+    global score
+
     pipes.update()
     player.update(pipes)
 
     if input_manager.get_key_down(pygame.K_SPACE):
         player.jump()
+    # if input_manager.get_key_down(pygame.K_b):
+    #     player.rebirth(WHITE)
 
     pipes.top.render()
     pipes.bottom.render()
     player.render()
+
+    score_text = Text(f"{score}", Text.arial_32, Vector2(0, window.HEIGHT // 3), Text.center, WHITE, BLACK)
+    score_text.render()
 
 
 def start():
@@ -122,7 +150,7 @@ def start():
     player = Player(Vector2(-window.WIDTH // 4, 0), window.WIDTH // 50, WHITE)
 
     variation = window.HEIGHT // 2
-    pipes = Pipes(Vector2(window.WIDTH // 2, random.randint(-variation // 2, variation // 2)), variation, window.HEIGHT // 4, window.WIDTH // 50, WHITE)
+    pipes = Pipes(Vector2(window.WIDTH // 2, random.randint(-variation // 2, variation // 2)), variation, window.HEIGHT // 4, window.WIDTH // 25, WHITE)
 
 
 def update():
