@@ -59,18 +59,18 @@ class Player:
         self.alive = True
 
         self.neurons = [
-            Neuron(0, Types.INPUT, random_float(-1, 1)),
-            Neuron(1, Types.INPUT, random_float(-1, 1)),
-            Neuron(2, Types.INPUT, random_float(-1, 1)),
-            Neuron(3, Types.INPUT, random_float(-1, 1)),
-            Neuron(4, Types.OUTPUT, random_float(-1, 1)),
+            Neuron(0, Types.INPUT, 0.0),
+            Neuron(1, Types.INPUT, 0.0),
+            Neuron(2, Types.INPUT, 0.0),
+            Neuron(3, Types.INPUT, 0.0),
+            Neuron(4, Types.OUTPUT, 0.0),
         ]
 
         self.connections = [
-            Connection(0, 0, 4, random_float(-1, 1), True),
-            Connection(1, 1, 4, random_float(-1, 1), True),
-            Connection(2, 2, 4, random_float(-1, 1), True),
-            Connection(3, 3, 4, random_float(-1, 1), True),
+            Connection(0, self.neurons[0], self.neurons[4], random_float(-1, 1), True),
+            Connection(1, self.neurons[1], self.neurons[4], random_float(-1, 1), True),
+            Connection(2, self.neurons[2], self.neurons[4], random_float(-1, 1), True),
+            Connection(3, self.neurons[3], self.neurons[4], random_float(-1, 1), True),
         ]
 
         self.fitness = 0
@@ -81,6 +81,11 @@ class Player:
         self.neurons[1].value = self.velocity.y
         self.neurons[2].value = distance_to_top_pipe
         self.neurons[3].value = distance_to_bottom_pipe
+
+        # Compute
+        for neuron in self.neurons:
+            neuron.get_connections(self.connections)
+            neuron.compute_value()
 
         # Decision
         if self.neurons[4].value >= 0.5:
@@ -120,8 +125,6 @@ class Player:
         # print(f"Player Clamped Position: {clamp(self.position.y, pipe.position.y, pipe.position.y - pipe.size.y)}")
         # print(f"Closest Position: {closest.y}")
         # print(f"######################################################################")
-
-        # DEBUG
         # draw_circle(window.SURFACE, GREEN, closest, self.radius, 2)
 
         # Calculate squared distance from the circle to the closest point on the pipe
