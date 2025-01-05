@@ -1,6 +1,5 @@
 from pg_extensions import *
-
-score = 0
+from network import *
 
 
 class Settings:
@@ -52,14 +51,40 @@ class Pipes:
 class Player:
     def __init__(self, position, radius, color):
         self.position = position
+        self.initial_position = position
         self.velocity = Vector2(0, 0)
         self.radius = radius
         self.color = color
+        self.initial_color = color
         self.alive = True
+
+        self.neurons = [
+            Neuron(0, Types.INPUT, random_float(-1, 1)),
+            Neuron(1, Types.INPUT, random_float(-1, 1)),
+            Neuron(2, Types.INPUT, random_float(-1, 1)),
+            Neuron(3, Types.INPUT, random_float(-1, 1)),
+            Neuron(4, Types.OUTPUT, random_float(-1, 1)),
+        ]
+
+        self.connections = [
+            Connection(0, 0, 4, random_float(-1, 1), True),
+            Connection(1, 1, 4, random_float(-1, 1), True),
+            Connection(2, 2, 4, random_float(-1, 1), True),
+            Connection(3, 3, 4, random_float(-1, 1), True),
+        ]
+
         self.fitness = 0
 
-    def jump(self):
-        self.velocity.y = Settings.JUMP_HEIGHT
+    def compute(self, distance_to_pipe, distance_to_top_pipe, distance_to_bottom_pipe):
+        # Update Inputs
+        self.neurons[0].value = distance_to_pipe
+        self.neurons[1].value = self.velocity.y
+        self.neurons[2].value = distance_to_top_pipe
+        self.neurons[3].value = distance_to_bottom_pipe
+
+        # Decision
+        if self.neurons[4].value >= 0.5:
+            self.velocity.y = Settings.JUMP_HEIGHT
 
     def update(self, pipes):
         if self.alive:
@@ -87,6 +112,7 @@ class Player:
             clamp(self.position.y, pipe.position.y - pipe.size.y, pipe.position.y),  # Clamp Y within pipe's height
         )
 
+        # DEBUG
         # print(f"Is Top: {is_top}")
         # print(f"Pipe Top: {pipe.position.y}")
         # print(f"Pipe Bottom: {pipe.position.y-pipe.size.y}")
@@ -95,6 +121,7 @@ class Player:
         # print(f"Closest Position: {closest.y}")
         # print(f"######################################################################")
 
+        # DEBUG
         # draw_circle(window.SURFACE, GREEN, closest, self.radius, 2)
 
         # Calculate squared distance from the circle to the closest point on the pipe
@@ -108,6 +135,8 @@ class Player:
 
     def handle_collisions(self, color):
         self.alive = False
+
+        # DEBUG
         # self.color = color
 
         self.fitness = score
@@ -115,9 +144,14 @@ class Player:
 
         self.position.y = clamp(self.position.y, -window.HEIGHT // 2 + self.radius, window.HEIGHT // 2 - self.radius)
 
-    # def rebirth(self, color):
-    #     self.alive = True
-    #     self.color = color
+    def rebirth(self, best):
+        self.position = self.initial_position
+        self.alive = True
+        self.color = self.initial_color
+
+        self.mutate(best)
+
+        self.fitness = 0
 
     def render(self):
         if self.alive:
@@ -128,26 +162,50 @@ def game():
     global score
 
     pipes.update()
-    player.update(pipes)
 
-    if input_manager.get_key_down(pygame.K_SPACE):
-        player.jump()
+    current_population = 0
+
+    for player in players:
+        player.update(pipes)
+        player.compute(
+            player.position.x - pipes.position.x, abs(player.position.y - pipes.top.position.y - window.HEIGHT), abs(player.position.y - pipes.bottom.position.y - window.HEIGHT)
+        )
+
+        if player.alive:
+            current_population += 1
+
+    # DEBUG
     # if input_manager.get_key_down(pygame.K_b):
     #     player.rebirth(WHITE)
 
     pipes.top.render()
     pipes.bottom.render()
-    player.render()
 
-    score_text = Text(f"{score}", Text.arial_32, Vector2(0, window.HEIGHT // 3), Text.center, WHITE, BLACK)
+    for player in players:
+        player.render()
+
+    score_text = Text(f"Score: {score}", Text.arial_32, Vector2(0, window.HEIGHT // 3), Text.center, WHITE, BLACK)
     score_text.render()
+
+    gen_text = Text(f"Generation: {generation}", Text.arial_32, Vector2(0, window.HEIGHT // 3 - 32), Text.center, WHITE, BLACK)
+    gen_text.render()
+
+    pop_text = Text(f"Population: {current_population}", Text.arial_32, Vector2(0, window.HEIGHT // 3 - 64), Text.center, WHITE, BLACK)
+    pop_text.render()
 
 
 def start():
-    global player, pipes, window
+    global players, pipes, window, score, generation, current_population
     window = get_window()
 
-    player = Player(Vector2(-window.WIDTH // 4, 0), window.WIDTH // 50, WHITE)
+    score = 0
+    generation = 1
+    current_population = Settings.POPULATION
+
+    players = []
+
+    for i in range(Settings.POPULATION):
+        players.append(Player(Vector2(-window.WIDTH // 3, 0), window.WIDTH // 50, WHITE))
 
     variation = window.HEIGHT // 2
     pipes = Pipes(Vector2(window.WIDTH // 2, random.randint(-variation // 2, variation // 2)), variation, window.HEIGHT // 4, window.WIDTH // 25, WHITE)
