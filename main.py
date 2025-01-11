@@ -7,7 +7,10 @@ class Settings:
     MAX_VEL = 1000
     PIPE_VEL = 1000
     JUMP_HEIGHT = 900 // 0.72
-    POPULATION = 25
+    POPULATION = 50
+
+    MUTATE_ADD_NEURON_CHANCE = 0.02
+    MUTATE_ADD_CONNECTION_CHANCE = 0.05
 
 
 class Pipe:
@@ -66,25 +69,133 @@ class Player:
             Neuron(1, Types.INPUT, 0.0),
             Neuron(2, Types.INPUT, 0.0),
             Neuron(3, Types.INPUT, 0.0),
-            Neuron(4, Types.OUTPUT, 0.0),
+            Neuron(4, Types.INPUT, 0.0),
+            Neuron(5, Types.INPUT, 0.0),
+            Neuron(6, Types.OUTPUT, 0.0),
         ]
 
         self.connections = [
-            Connection(0, self.neurons[0], self.neurons[4], random_float(-1, 1), True),
-            Connection(1, self.neurons[1], self.neurons[4], random_float(-1, 1), True),
-            Connection(2, self.neurons[2], self.neurons[4], random_float(-1, 1), True),
-            Connection(3, self.neurons[3], self.neurons[4], random_float(-1, 1), True),
+            Connection(0, self.neurons[0], self.neurons[6], random_float(-1, 1), True),
+            Connection(1, self.neurons[1], self.neurons[6], random_float(-1, 1), True),
+            Connection(2, self.neurons[2], self.neurons[6], random_float(-1, 1), True),
+            Connection(3, self.neurons[3], self.neurons[6], random_float(-1, 1), True),
+            Connection(4, self.neurons[4], self.neurons[6], random_float(-1, 1), True),
+            Connection(5, self.neurons[5], self.neurons[6], random_float(-1, 1), True),
         ]
 
         self.time_survived = time.time()
         self.fitness = 0
 
+    def add_random_neuron(self):
+        """
+        Add a new neuron by splitting an existing connection.
+        """
+        # Select a random connection
+        enabled_connections = [c for c in self.connections if c.enabled]
+        if not enabled_connections:
+            return  # No valid connections to split
+
+        connection_to_split = random.choice(enabled_connections)
+        connection_to_split.enabled = False  # Disable the old connection
+
+        # Create a new hidden neuron
+        new_neuron_id = max([n.id for n in self.neurons]) + 1
+        new_neuron = Neuron(new_neuron_id, Types.HIDDEN)
+        self.neurons.append(new_neuron)
+
+        # Add two new connections
+        new_connection1 = Connection(
+            innovation_number=len(self.connections),
+            from_neuron=connection_to_split.from_neuron,
+            to_neuron=new_neuron,
+            weight=random_float(-1, 1),  # Set to 1.0 or another initial weight
+            enabled=True,
+        )
+        new_connection2 = Connection(
+            innovation_number=len(self.connections) + 1,
+            from_neuron=new_neuron,
+            to_neuron=connection_to_split.to_neuron,
+            weight=connection_to_split.weight,  # Inherit weight
+            enabled=True,
+        )
+
+        self.connections.append(new_connection1)
+        self.connections.append(new_connection2)
+
+    def add_random_connection(self):
+        """
+        Add a new random connection between two neurons.
+        """
+        # Find all possible pairs of neurons
+        possible_pairs = [(n1, n2) for n1 in self.neurons for n2 in self.neurons if n1 != n2 and n1.type != Types.OUTPUT and n2.type != Types.OUTPUT]
+
+        # Remove existing connections
+        for conn in self.connections:
+            if (conn.from_neuron, conn.to_neuron) in possible_pairs:
+                possible_pairs.remove((conn.from_neuron, conn.to_neuron))
+
+        if not possible_pairs:
+            return  # No valid pairs for a new connection
+
+        # Pick a random pair
+        from_neuron, to_neuron = random.choice(possible_pairs)
+
+        # Add a new connection
+        new_connection = Connection(
+            innovation_number=len(self.connections),
+            from_neuron=from_neuron,
+            to_neuron=to_neuron,
+            weight=random.uniform(-1, 1),  # Random initial weight
+            enabled=True,
+        )
+        self.connections.append(new_connection)
+
+    def mutate_structure(self):
+        """
+        Perform structural mutations by adding neurons or connections.
+        """
+        if random_float() < Settings.MUTATE_ADD_NEURON_CHANCE:
+            self.add_random_neuron()
+
+        if random_float() < Settings.MUTATE_ADD_CONNECTION_CHANCE:
+            self.add_random_connection()
+
     def compute(self, distance_to_pipe, distance_to_top_pipe, distance_to_bottom_pipe):
         # Update Inputs
         self.neurons[0].value = distance_to_pipe
-        self.neurons[1].value = self.velocity.y
-        self.neurons[2].value = distance_to_top_pipe
-        self.neurons[3].value = distance_to_bottom_pipe
+        self.neurons[1].value = self.position.y
+        self.neurons[2].value = self.velocity.y
+        self.neurons[3].value = distance_to_top_pipe
+        self.neurons[4].value = distance_to_bottom_pipe
+        self.neurons[5].value = window.HEIGHT // 2 - abs(self.position.y)
+
+        if self.alive:
+            draw_line(window.SURFACE, GREEN, self.position, Vector2(self.position.x + distance_to_pipe, self.position.y), 2)
+            draw_line(
+                window.SURFACE, RED, Vector2(self.position.x + distance_to_pipe, self.position.y), Vector2(self.position.x + distance_to_pipe, self.position.y + distance_to_top_pipe), 2
+            )
+            draw_line(
+                window.SURFACE,
+                YELLOW,
+                Vector2(self.position.x + distance_to_pipe, self.position.y),
+                Vector2(self.position.x + distance_to_pipe, self.position.y - distance_to_bottom_pipe),
+                2,
+            )
+            draw_line(
+                window.SURFACE,
+                BLUE,
+                self.position,
+                pipes.position,
+                2,
+            )
+
+            draw_line(
+                window.SURFACE,
+                PURPLE,
+                self.position,
+                Vector2(self.position.x, window.HEIGHT // 2 if self.position.y >= 0 else -window.HEIGHT // 2),
+                2,
+            )
 
         # Compute
         for neuron in self.neurons:
@@ -92,7 +203,7 @@ class Player:
             neuron.compute_value()
 
         # Decision
-        if self.neurons[4].value >= 0.5:
+        if self.neurons[6].value >= 0.5:
             self.velocity.y = Settings.JUMP_HEIGHT
 
     def update(self, pipes):
@@ -107,10 +218,10 @@ class Player:
                 self.velocity = self.velocity * Settings.MAX_VEL / mag
 
             # Check collisions and handle if present
-            if self.check_collisions(pipes.top, True) or self.check_collisions(pipes.bottom, False):
-                self.handle_collisions(GRAY)
+            if self.check_collisions(pipes.top) or self.check_collisions(pipes.bottom):
+                self.handle_collisions(pipes)
 
-    def check_collisions(self, pipe, is_top):
+    def check_collisions(self, pipe):
         # Ground and ceiling check
         if self.position.y + self.radius >= window.HEIGHT // 2 or self.position.y - self.radius <= -window.HEIGHT // 2:
             return True
@@ -140,7 +251,7 @@ class Player:
 
         return False
 
-    def handle_collisions(self, color):
+    def handle_collisions(self, pipes):
         self.alive = False
 
         # DEBUG
@@ -149,7 +260,7 @@ class Player:
         self.time_survived -= time.time()
         self.time_survived = abs(self.time_survived)
 
-        self.fitness = (score + 1) * self.time_survived
+        self.fitness = (score + 1) * self.time_survived * abs((pipes.position - self.position).magnitude()) / window.HEIGHT // 2 - abs(self.position.y)
 
         self.position.y = clamp(self.position.y, -window.HEIGHT // 2 + self.radius, window.HEIGHT // 2 - self.radius)
 
@@ -168,7 +279,7 @@ class Player:
 def save():
     global winner
 
-    file_name = f"{time.localtime().tm_mon:02}{time.localtime().tm_mday:02}{time.localtime().tm_year:04}-{time.localtime().tm_hour * 3600 + time.localtime().tm_min * 60 + time.localtime().tm_sec}.neat"
+    file_name = f"{time.localtime().tm_mday:02}{time.localtime().tm_mon:02}{time.localtime().tm_year:04}-{time.localtime().tm_hour * 3600 + time.localtime().tm_min * 60 + time.localtime().tm_sec}.neat"
     print(f"Saving to: {file_name}")
 
     # Get values
@@ -214,7 +325,7 @@ def game():
     for player in players:
         player.update(pipes)
         player.compute(
-            player.position.x - pipes.position.x, abs(player.position.y - pipes.top.position.y - window.HEIGHT), abs(player.position.y - pipes.bottom.position.y - window.HEIGHT)
+            abs(player.position.x - pipes.position.x), abs(player.position.y - pipes.top.position.y - window.HEIGHT), abs(player.position.y - pipes.bottom.position.y - window.HEIGHT)
         )
 
         if player.alive:
@@ -238,6 +349,8 @@ def game():
 
             for c in player.connections:
                 c.mutate_weight(winner.connections, 0.1)
+
+            player.mutate_structure()
 
         # Reset game
         pipes.reset()
